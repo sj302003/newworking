@@ -1,0 +1,9 @@
+﻿The command to run the parallelized plane cpp code:
+
+First install nlopt : Take help from  https://nlopt.readthedocs.io/en/latest/NLopt_Installation/#nlopt-with-c-algorithms
+
+Next : export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/lib/
+
+Next : g++ -O3 planeproblem_objV3_v2.cpp -o uttest -lnlopt -lm -fopenmp
+
+Next : ./uttest nodecoord.txt nodecon.txt boundcond_UE.txt   (Order of the input files is important)
