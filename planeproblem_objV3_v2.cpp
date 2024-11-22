@@ -1,5 +1,3 @@
-// planeproblem.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
 #include<iostream>
 #include<fstream>
 #include<string>
@@ -103,6 +101,7 @@ struct Cnstrelret {
 
 double myfunc(unsigned, const double*, double*, void*);
 void myconstraint(unsigned, double*, unsigned, const double*, double*, void* );
+// void myconstraint(unsigned, double, unsigned, const double*, double*, void* );
 // double myconstraint(unsigned, const double*, double*, void* );
 struct GQVandW {
 	vector<double> value;
@@ -1204,7 +1203,7 @@ int main(int argc, char* argv[]) {
 	Amat_cols = Amat[0].size();
 	obj_data.elemdat = elements;
 	obj_data.nodecord = nodes;
-	obj_data.dispscalefac = 1;
+	obj_data.dispscalefac = 1e3;  /* Change of value */
 	obj_data.numnode = numnode;
 	obj_data.numele = numele;
 	obj_data.lnpos = count_dc;
@@ -1228,21 +1227,23 @@ int main(int argc, char* argv[]) {
 	constraint_data.Fvec = Fvector;
 	constraint_data.rows = row;
 	constraint_data.intmat = intmat;
-	const double toler = 1e-14;
+	const double tolX = 1e-13;
+	const double tolFun = 1e-13;
+	const double tolCon = 1e-14;
 	unsigned m = row;
 	//double tol[m];
 	double *tol = new double[m];
 	for(int i=0;i<m;i++){
-		tol[i] = toler;
+		tol[i] = tolCon;
 	}
 	nlopt_opt opt;
 	opt = nlopt_create(NLOPT_LD_SLSQP, n);
 	nlopt_set_min_objective(opt, myfunc, &obj_data);
 	nlopt_add_equality_mconstraint(opt, m, myconstraint, &constraint_data, tol);
 	// nlopt_add_equality_constraint(opt, myconstraint, &constraint_data, toler);
-	nlopt_set_xtol_rel(opt, toler);
-	nlopt_set_ftol_rel(opt, toler);
-	nlopt_set_ftol_abs(opt, toler/10000);
+	nlopt_set_xtol_rel(opt, tolX);
+	nlopt_set_ftol_rel(opt, tolFun);
+	nlopt_set_ftol_abs(opt, tolFun);
 	double x[n];
 	for (int i=0; i<2*numnode; i++){
 		x[i] = 0;
@@ -1253,20 +1254,21 @@ int main(int argc, char* argv[]) {
 	double minf;
 	double *xreq;
 	xreq = x;
-	double start = omp_get_wtime();
+	double start = 4; // omp_get_wtime();
 	int answer= nlopt_optimize(opt, xreq, &minf);
-	double end = omp_get_wtime();
+	double end = 4; // omp_get_wtime();
 
 	cout << "Time taken : " << end - start << endl;
 	if (answer<0){
 		cout<<"Optimization did not converge. Exit code: "<<answer<<endl;
 	}
 	else {
-		cout<<"Optimization converged"<<endl<<"minf = "<<minf<<"exit flag = " << answer<<endl;
+		cout<<"Optimization converged"<<endl<<"minf = "<<minf<<endl;
+		cout<<" exit flag = " << answer<<endl;
 	}
 	cout << "Overall time taken by objective function : " << obj_exec_time << endl; 
 	ofstream outoptfile;
-	outoptfile.open("With_Temp_Matrix_6.csv");
+	outoptfile.open("Solutionvec.csv");
 	for (int i=0; i<(8*numnode+count_dc); i++){
 		outoptfile<< x[i]<< endl;
 	}
@@ -1725,7 +1727,7 @@ double *grad2 = (double*) malloc((8*nn+nl) * sizeof(double));
 double myfunc(unsigned n, const double *x, double *grad, void *f_data)
 {
 	cout<<"Objective function value: ";
-	double s1 = omp_get_wtime();
+	double s1 = 4; //omp_get_wtime();
 
 	objdata *d = (objdata *)f_data;
 	vector<node> nodecords = d->nodecord;
@@ -1761,7 +1763,7 @@ double myfunc(unsigned n, const double *x, double *grad, void *f_data)
 	int numpar;
 	int GQorder = 10;
 	double errval=0;
-	double ScaleFac = 1e3;
+	double ScaleFac = 1e6;  /* using changed dispscalefac*/
 	if (grad == nullptr){
 		//grad = (double*) malloc((8*numnodes+lenpos) * sizeof(double));
 		free(grad2);
@@ -1772,7 +1774,8 @@ double myfunc(unsigned n, const double *x, double *grad, void *f_data)
 	for (int i=0; i<(8*numnodes+lenpos); i++){
 		grad[i] = 0;
 	}
-	for (int e=0; e<numelem; e++){
+	for (int e=0; e<numelem; e++)
+	{
 		vector<double> matparv;
 		elenodes[0] = ele[e].node1-1;
 		elenodes[1] = ele[e].node2-1;
@@ -1823,7 +1826,7 @@ double myfunc(unsigned n, const double *x, double *grad, void *f_data)
 	//for(int i = 0 ; i < (8*numnodes+lenpos); i++)
 	//	cout << grad[i] << ",";
 	//cout << endl;
-	double e1 = omp_get_wtime();
+	double e1 = 4; //omp_get_wtime();
 	obj_exec_time += e1 - s1;
 	//cout << "Time taken in objective function: " << e1 - s1 << endl;
 //	getMemSnapshot(iter);
@@ -1836,18 +1839,42 @@ int ctr = 0;
 double* grad1 = (double*) malloc(Amat_rows * Amat_cols * sizeof(double));
 void myconstraint(unsigned m, double *result, unsigned n, const double *x, double* grad, void *cdat)
 {
+	cout<<"Inside my constraint function"<<endl;
 	constdata *d = (constdata *) cdat;
 	vector<vector<double>> Amatrix = d->Amat;
 	vector<double> frcvec = d->Fvec;
-	double ScaleFac = 1;
-	if (grad == nullptr){
+	// vector<double> result;
+	double fnl_result = 0;
+	double ScaleFac = 1e4;
+	vector<vector<double>> Kval;
+	double fval0 = 0.0;
+	vector<double> fval1; 
+	for (int i=0;i<n;i++)
+	{
+		fval1[i] = 0;
+		for (int j=0;j<n;j++)
+		{
+			Kval[i][j] = 0;
+		}
+	}
+	/* for (int i=0;i<Amatrix.size();i++)
+	{
+		for (int j=0;i<Amatrix.size();j++)
+		{
+			fval0[i][j] = 0;
+		}
+	} */
+	if (grad == nullptr)
+	{
 		//ctr++;
 		//std::cout<<"Grad nullptr: "<<ctr<<'\n';
 		free(grad1);
 		//grad1 = (double*) malloc(Amat_rows * Amat_cols * sizeof(double));
 		grad1 = (double*) malloc(Amatrix.size() * Amatrix[0].size() * sizeof(double));
-		for (int i = 0; i < Amatrix.size()*Amatrix[0].size(); i++) grad1[i] = 0;
-		
+		for (int i = 0; i < Amatrix.size()*Amatrix[0].size(); i++)
+		{	
+			grad1[i] = 0;
+		}
 		grad = grad1;	
 	}
 	//else{
@@ -1855,14 +1882,61 @@ void myconstraint(unsigned m, double *result, unsigned n, const double *x, doubl
 	//	std::cout<<"Grad not nullptr: "<<ctr<<'\n';
 
 	//}
+	cout<<" Done: Level 1"<<endl;
+	for (int i=0; i<n;i++)
+	{
+		for (int j=0;j<n;j++)
+		{
+			for (int k=0;k<Amatrix.size();k++)
+			{
+				Kval[i][j] = Kval[i][j] + Amatrix[i][k]*Amatrix[k][j];
+			}
+		}
+	}
+	cout<<" Done: Level 2"<<endl;
+	for (int i=0;i<Amatrix.size();i++)
+	{
+		fval0 = fval0 + frcvec[i]*frcvec[i];
+	}
+	cout<<" Done: Level 3"<<endl;
+	for (int i=0;i<n;i++)
+	{
+		for (int j=0;j<Amatrix.size();j++)
+		{
+			fval1[i] = fval1[i] + Amatrix[i][j]*frcvec[j];
+		}
+	}
+	cout<<" Done: Level 4"<<endl;
+	for (int i=0;i<n;i++)
+	{
+		for (int j=0;j<n;j++)
+		{
+			fnl_result = fnl_result + x[i]*Kval[i][j]*x[j];	
+		}
+		fnl_result = fnl_result - 2*x[i]*fval1[i];
+	}
+	fnl_result = fnl_result + fval0;
+	for (int i=0;i<Amatrix.size();i++)
+	{
+		for (int j=0;j<n;j++)
+		{
+			grad[i*n+j] = 2*Kval[i][j]*x[j] - 2*fval1[i];
+		}
+	}
+	/*
+
 	for (int i = 0; i < Amatrix.size(); i++) {
 		result[i] = -frcvec[i];
 		for (int j = 0; j < n; j++) {
 			result[i] = result[i] + Amatrix[i][j]*x[j];
 			grad[i*n+j] = Amatrix[i][j];
 		}
-		result[i] = result[i]*ScaleFac;
-	}
+		// result[i] = result[i]*ScaleFac;
+		fnl_result = fnl_result + result[i]*result[i];
+	}  */
+
+	fnl_result = ScaleFac*fnl_result; 
+	cout<<" Final value of Constraint = " << fnl_result<<endl; 
 	//cout << "completed constrained funtion from planeproblem\n";
 	//free(grad);
 	return;
